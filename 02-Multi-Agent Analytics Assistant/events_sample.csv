@@ -1,0 +1,14 @@
+analytics_task:
+  description: >
+    Chat history:
+    {chat_history}
+
+    User request:
+    {user_prompt}
+
+    Understand the request. Delegate to the Data Analyst for SQL/KPI/dashboard/EDA
+    work, and to the Data Scientist for ML/statistics/forecasting work. Use tools
+    where helpful. Combine everything into one clear final answer for the user.
+  expected_output: >
+    A clear final answer with: 1) Direct Answer 2) Key Findings / Recommendations
+    3) Next Steps. Keep it practical and easy to read.

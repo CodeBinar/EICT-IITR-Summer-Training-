@@ -1,0 +1,52 @@
+# Multi-Agent Analytics Assistant (Simple Version)
+
+A minimal CrewAI + Streamlit + Ollama app with 3 agents and a small local MCP server.
+
+## Folder structure
+```
+analytics_project/
+├── app.py              # Streamlit chat UI + CrewAI crew
+├── tools.py             # Function tools (+ MCP client tool)
+├── mcp_server.py         # analytics_mcp_server (local HTTP tool server)
+├── config/
+│   ├── agents.yaml
+│   └── tasks.yaml
+├── sample_data/
+│   └── events_sample.csv
+└── requirements.txt
+```
+
+## How it works
+- **Supervisor Agent** reads the user request and delegates to the right specialist
+  (CrewAI hierarchical process handles this automatically).
+- **Data Analyst Agent** handles SQL/KPI/dashboard questions, using local tools.
+- **Data Scientist Agent** handles ML/forecasting questions, using local tools.
+- Both agents can call `call_analytics_mcp_tool`, which sends a request to the
+  local **analytics_mcp_server** (`mcp_server.py`) for CSV profiling and KPI catalogs.
+
+## Setup
+```bash
+pip install -r requirements.txt
+ollama pull llama3.2:3b
+ollama serve
+```
+
+## Run (2 terminals)
+Terminal 1 — start the MCP server:
+```bash
+python mcp_server.py
+```
+
+Terminal 2 — start the app:
+```bash
+streamlit run app.py
+```
+
+## Try asking
+- "Suggest KPIs for the events_sample.csv file"
+- "Profile events_sample.csv and tell me about data quality"
+- "I want to predict which customers will churn, what ML approach should I use?"
+
+## Notes
+- Optional `.env` file: `OLLAMA_BASE_URL`, `MODEL_NAME`
+- MCP server only reads files inside `sample_data/` for safety.

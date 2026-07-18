@@ -1,0 +1,111 @@
+import os
+from pathlib import Path
+
+import streamlit as st
+import yaml
+from dotenv import load_dotenv
+from crewai import Agent, Crew, LLM, Process, Task
+
+from tools import ANALYST_TOOLS, SCIENTIST_TOOLS
+
+load_dotenv()
+
+BASE_DIR = Path(__file__).parent
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+MODEL_NAME = os.getenv("MODEL_NAME", "llama3.2:3b")
+
+st.set_page_config(page_title="Multi-Agent Analytics Assistant", page_icon="🤖")
+st.title("🤖 Multi-Agent Analytics Assistant")
+st.caption(f"Model: `{MODEL_NAME}` via Ollama | MCP server expected at http://localhost:8000")
+
+
+# ---------- Load config ----------
+
+def load_yaml(name: str) -> dict:
+    with open(BASE_DIR / "config" / name, "r", encoding="utf-8") as f:
+        return yaml.safe_load(f)
+
+agents_cfg = load_yaml("agents.yaml")
+tasks_cfg = load_yaml("tasks.yaml")
+
+
+# ---------- Build LLM ----------
+
+llm = LLM(model=f"ollama/{MODEL_NAME}", base_url=OLLAMA_BASE_URL, temperature=0.3)
+
+
+# ---------- Build agents ----------
+
+def make_agent(key: str, tools=None) -> Agent:
+    cfg = agents_cfg[key]
+    return Agent(
+        role=cfg["role"],
+        goal=cfg["goal"],
+        backstory=cfg["backstory"],
+        allow_delegation=cfg.get("allow_delegation", False),
+        verbose=cfg.get("verbose", True),
+        tools=tools or [],
+        llm=llm,
+    )
+
+supervisor = make_agent("supervisor_agent")
+analyst = make_agent("data_analyst_agent", tools=ANALYST_TOOLS)
+scientist = make_agent("data_scientist_agent", tools=SCIENTIST_TOOLS)
+
+
+# ---------- Chat state ----------
+
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
+
+
+# ---------- Handle input ----------
+
+user_prompt = st.chat_input("Ask your analytics crew...")
+
+if user_prompt:
+    st.session_state.messages.append({"role": "user", "content": user_prompt})
+    with st.chat_message("user"):
+        st.markdown(user_prompt)
+
+    chat_history = "\n".join(
+        f"{m['role'].upper()}: {m['content']}" for m in st.session_state.messages[-6:]
+    )
+
+    task_cfg = tasks_cfg["analytics_task"]
+    task = Task(
+        description=task_cfg["description"].format(
+            chat_history=chat_history, user_prompt=user_prompt
+        ),
+        expected_output=task_cfg["expected_output"],
+        agent=supervisor,
+    )
+
+    crew = Crew(
+        agents=[analyst, scientist],
+        tasks=[task],
+        manager_agent=supervisor,
+        process=Process.hierarchical,
+        verbose=True,
+    )
+
+    with st.chat_message("assistant"):
+        with st.spinner("Supervisor is delegating and thinking..."):
+            try:
+                result = crew.kickoff()
+                answer = str(result)
+            except Exception as e:
+                answer = (
+                    f"Something went wrong: {e}\n\n"
+                    "Checklist:\n"
+                    "- Is Ollama running? `ollama serve`\n"
+                    f"- Is model `{MODEL_NAME}` pulled? `ollama pull {MODEL_NAME}`\n"
+                    "- Is the MCP server running? `python mcp_server.py`"
+                )
+        st.markdown(answer)
+
+    st.session_state.messages.append({"role": "assistant", "content": answer})
